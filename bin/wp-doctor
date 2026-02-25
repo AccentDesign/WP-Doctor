@@ -235,12 +235,18 @@ switch ($command) {
     case 'preview':
         $path = $positionalArgs[0] ?? getcwd();
 
-        // Detect wp-content
+        // Detect wp-content (same logic as scan)
         $wpContentPath = null;
         if (is_dir($path . '/wp-content')) {
             $wpContentPath = $path . '/wp-content';
         } elseif (is_dir($path . '/app/wp-content')) {
             $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        } elseif (basename($path) === 'plugins' || basename($path) === 'themes') {
+            $wpContentPath = $path;
+        } elseif (is_dir($path)) {
+            $wpContentPath = $path;
         }
 
         if (!$wpContentPath) {
@@ -254,7 +260,7 @@ switch ($command) {
         $doctor = new Doctor(['path' => $wpContentPath]);
         $result = $doctor->diagnose();
 
-        $fixer = new Fixer($result['diagnostics']);
+        $fixer = new Fixer($result['diagnostics'], dirname($wpContentPath));
         $fixes = $fixer->preview();
 
         if (empty($fixes)) {

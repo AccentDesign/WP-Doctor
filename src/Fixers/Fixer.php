@@ -13,6 +13,7 @@ class Fixer
     private array $diagnostics;
     private array $fixes = [];
     private string $backupDir;
+    private string $basePath;
 
     /**
      * Rules that can be auto-fixed
@@ -24,10 +25,11 @@ class Fixer
         'stripslashes-null' => 'fixStripslashesNull',
     ];
 
-    public function __construct(array $diagnostics)
+    public function __construct(array $diagnostics, ?string $basePath = null)
     {
         $this->diagnostics = $diagnostics;
-        $this->backupDir = WP_CONTENT_DIR . '/wp-doctor-backups/' . date('Y-m-d_H-i-s');
+        $this->basePath = $basePath ?? (defined('WP_CONTENT_DIR') ? dirname(WP_CONTENT_DIR) : getcwd());
+        $this->backupDir = $this->basePath . '/.wp-doctor-backups/' . date('Y-m-d_H-i-s');
     }
 
     /**
@@ -70,7 +72,7 @@ class Fixer
 
         // Create backup directory
         if (!is_dir($this->backupDir)) {
-            wp_mkdir_p($this->backupDir);
+            $this->mkdirRecursive($this->backupDir);
         }
 
         // Group fixes by file
@@ -281,15 +283,26 @@ class Fixer
      */
     private function backupFile(string $filePath): bool
     {
-        $relativePath = str_replace(ABSPATH, '', $filePath);
+        $relativePath = str_replace($this->basePath . '/', '', $filePath);
         $backupPath = $this->backupDir . '/' . $relativePath;
         $backupDir = dirname($backupPath);
 
         if (!is_dir($backupDir)) {
-            wp_mkdir_p($backupDir);
+            $this->mkdirRecursive($backupDir);
         }
 
         return copy($filePath, $backupPath);
+    }
+
+    /**
+     * Create directory recursively (works without WordPress)
+     */
+    private function mkdirRecursive(string $path): bool
+    {
+        if (is_dir($path)) {
+            return true;
+        }
+        return mkdir($path, 0755, true);
     }
 
     /**
