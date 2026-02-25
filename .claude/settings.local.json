@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php bin/wp-doctor:*)",
+      "Bash(php:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(mkdir:*)",
+      "Bash(for:*)",
+      "Bash(#:*)"
+    ]
+  }
+}

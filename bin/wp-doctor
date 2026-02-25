@@ -1,0 +1,564 @@
+#!/usr/bin/env php
+<?php
+/**
+ * WP Doctor - Standalone CLI
+ *
+ * Diagnose WordPress code issues without requiring WordPress to be running.
+ * This is useful for CI/CD, static analysis, and environments without DB.
+ *
+ * Usage:
+ *   ./bin/wp-doctor scan /path/to/wordpress
+ *   ./bin/wp-doctor scan /path/to/wordpress --format=json
+ *   ./bin/wp-doctor check /path/to/file.php
+ */
+
+// Check for dependencies before autoload
+function checkDependencies() {
+    $errors = [];
+
+    // Check PHP version
+    if (version_compare(PHP_VERSION, '8.0.0', '<')) {
+        $errors[] = "PHP 8.0+ required (found " . PHP_VERSION . "). Install with: brew install php";
+    }
+
+    // Check for Composer autoload
+    $autoloadPath = __DIR__ . '/../vendor/autoload.php';
+    if (!file_exists($autoloadPath)) {
+        $errors[] = "Composer dependencies not installed. Run: cd " . dirname(__DIR__) . " && composer install";
+    }
+
+    if (!empty($errors)) {
+        echo "\033[31m✗ WP Doctor - Missing Dependencies\033[0m\n\n";
+        foreach ($errors as $error) {
+            echo "  • {$error}\n";
+        }
+        echo "\n\033[33mFor Claude: Run the above commands to install dependencies, then retry.\033[0m\n";
+        exit(1);
+    }
+}
+
+checkDependencies();
+
+// Autoload
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use AccentDesign\WPDoctor\Doctor;
+use AccentDesign\WPDoctor\Reporters\Reporter;
+use AccentDesign\WPDoctor\Fixers\Fixer;
+
+// Parse arguments
+$args = array_slice($argv, 1);
+$command = $args[0] ?? 'help';
+$positionalArgs = [];
+$options = [];
+
+foreach ($args as $i => $arg) {
+    if ($i === 0) continue; // skip command
+
+    if (strpos($arg, '--') === 0) {
+        $parts = explode('=', substr($arg, 2), 2);
+        $key = $parts[0];
+        $value = $parts[1] ?? true;
+        $options[$key] = $value;
+    } else {
+        $positionalArgs[] = $arg;
+    }
+}
+
+// Define colors
+function colorize($text, $color) {
+    $colors = [
+        'red' => "\033[31m",
+        'green' => "\033[32m",
+        'yellow' => "\033[33m",
+        'blue' => "\033[34m",
+        'magenta' => "\033[35m",
+        'cyan' => "\033[36m",
+        'white' => "\033[37m",
+        'reset' => "\033[0m",
+        'bold' => "\033[1m",
+    ];
+    return ($colors[$color] ?? '') . $text . $colors['reset'];
+}
+
+function output($message, $color = null) {
+    if ($color) {
+        echo colorize($message, $color) . "\n";
+    } else {
+        echo $message . "\n";
+    }
+}
+
+function error($message) {
+    output("Error: " . $message, 'red');
+    exit(1);
+}
+
+function success($message) {
+    output("✓ " . $message, 'green');
+}
+
+function warning($message) {
+    output("⚠ " . $message, 'yellow');
+}
+
+// Commands
+switch ($command) {
+    case 'scan':
+        $path = $positionalArgs[0] ?? getcwd();
+
+        if (!is_dir($path)) {
+            error("Directory not found: {$path}");
+        }
+
+        // Detect wp-content or use path directly
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        } elseif (basename($path) === 'plugins' || basename($path) === 'themes') {
+            // Direct plugins/themes directory
+            $wpContentPath = $path;
+        } elseif (is_dir($path)) {
+            // Any directory with PHP files - scan it directly
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        $format = $options['format'] ?? 'table';
+        $category = $options['category'] ?? 'all';
+        $verbose = isset($options['verbose']);
+        $pluginsOnly = isset($options['plugins']);
+        $themesOnly = isset($options['themes']);
+        $scanAll = isset($options['all']);
+        $nonInteractive = isset($options['non-interactive']) || isset($options['ci']);
+        $ignore = isset($options['ignore']) ? explode(',', $options['ignore']) : [];
+
+        output('');
+        output(colorize('WP Doctor', 'bold') . ' - Scanning WordPress installation...', 'cyan');
+        output('Path: ' . $wpContentPath);
+        if ($scanAll) {
+            output('Mode: Scanning ALL plugins and themes (--all)', 'yellow');
+        } else {
+            output('Mode: Custom plugins + active theme only (default)');
+        }
+        if (!empty($ignore)) {
+            output('Ignoring: ' . implode(', ', $ignore));
+        }
+        output('');
+
+        $doctor = new Doctor([
+            'path' => $wpContentPath,
+            'category' => $category,
+            'verbose' => $verbose,
+            'plugins_only' => $pluginsOnly,
+            'themes_only' => $themesOnly,
+            'custom_only' => !$scanAll,
+            'interactive' => !$nonInteractive,
+            'ignore' => $ignore,
+        ]);
+
+        $result = $doctor->diagnose();
+
+        // Output based on format
+        if ($format === 'json') {
+            echo json_encode($result, JSON_PRETTY_PRINT) . "\n";
+        } else {
+            $reporter = new Reporter($format, $verbose);
+            $reporter->output($result);
+        }
+
+        // Exit code based on score
+        $score = $result['score']['score'] ?? 100;
+        if ($score < 50) {
+            exit(2);
+        } elseif ($score < 75) {
+            exit(1);
+        }
+        exit(0);
+        break;
+
+    case 'check':
+        $file = $positionalArgs[0] ?? null;
+
+        if (!$file) {
+            error("Please specify a file to check");
+        }
+
+        if (!file_exists($file)) {
+            error("File not found: {$file}");
+        }
+
+        $format = $options['format'] ?? 'table';
+
+        output('');
+        output(colorize('WP Doctor', 'bold') . ' - Checking file...', 'cyan');
+        output('File: ' . $file);
+        output('');
+
+        $doctor = new Doctor(['path' => dirname($file)]);
+        $result = $doctor->checkFile($file);
+
+        if ($format === 'json') {
+            echo json_encode($result, JSON_PRETTY_PRINT) . "\n";
+        } else {
+            if (empty($result)) {
+                success("No issues found!");
+            } else {
+                warning(count($result) . " issue(s) found:");
+                output('');
+                foreach ($result as $diagnostic) {
+                    $severity = $diagnostic['severity'];
+                    $color = $severity === 'error' ? 'red' : 'yellow';
+                    output(sprintf(
+                        "  %s:%d [%s] %s",
+                        basename($file),
+                        $diagnostic['line'],
+                        colorize($severity, $color),
+                        $diagnostic['message']
+                    ));
+                    if (!empty($diagnostic['suggestion'])) {
+                        output("    → " . $diagnostic['suggestion'], 'cyan');
+                    }
+                }
+            }
+        }
+        exit(empty($result) ? 0 : 1);
+        break;
+
+    case 'preview':
+        $path = $positionalArgs[0] ?? getcwd();
+
+        // Detect wp-content
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        output('');
+        output(colorize('WP Doctor', 'bold') . ' - Preview Mode (no changes)', 'cyan');
+        output('');
+
+        $doctor = new Doctor(['path' => $wpContentPath]);
+        $result = $doctor->diagnose();
+
+        $fixer = new Fixer($result['diagnostics']);
+        $fixes = $fixer->preview();
+
+        if (empty($fixes)) {
+            success("No auto-fixable issues found.");
+            exit(0);
+        }
+
+        output(sprintf("Found %d auto-fixable issues:", count($fixes)));
+        output('');
+
+        foreach ($fixes as $fix) {
+            output(sprintf("  %s:%d", $fix['file'], $fix['line']));
+            output(sprintf("    %s", $fix['description']), 'cyan');
+            output(sprintf("    - %s", $fix['before']), 'red');
+            output(sprintf("    + %s", $fix['after']), 'green');
+            output('');
+        }
+
+        output("Run 'wp-doctor fix' to apply these changes.");
+        break;
+
+    case 'reset-config':
+        $path = $positionalArgs[0] ?? getcwd();
+
+        // Detect wp-content
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        $configDir = null;
+        $searchPath = $wpContentPath;
+        for ($i = 0; $i < 5; $i++) {
+            if (is_dir($searchPath . '/.git') || file_exists($searchPath . '/composer.json')) {
+                $configDir = $searchPath . '/.wp-doctor';
+                break;
+            }
+            $searchPath = dirname($searchPath);
+        }
+
+        if (!$configDir) {
+            $configDir = $wpContentPath . '/.wp-doctor';
+        }
+
+        $configFile = $configDir . '/plugins.json';
+        if (file_exists($configFile)) {
+            unlink($configFile);
+            success("Cleared plugin/theme configuration: {$configFile}");
+            output("Next scan will re-detect plugins and prompt for classification.");
+        } else {
+            warning("No configuration file found at: {$configFile}");
+        }
+        break;
+
+    case 'list-config':
+        $path = $positionalArgs[0] ?? getcwd();
+
+        // Detect wp-content
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        $detector = new \AccentDesign\WPDoctor\WPDetector($wpContentPath, false);
+        $config = $detector->listConfig();
+
+        if (empty($config)) {
+            output("No plugin/theme configuration saved yet.");
+            output("Run 'wp-doctor scan' to detect and classify plugins.");
+        } else {
+            output('');
+            output(colorize('Saved Plugin Classifications:', 'bold'));
+            output('');
+            foreach ($config as $slug => $info) {
+                $type = $info['type'];
+                $color = $type === 'custom' ? 'green' : ($type === 'wordpress.org' ? 'cyan' : 'yellow');
+                output(sprintf("  %s: %s", colorize($slug, 'bold'), colorize($type, $color)));
+            }
+            output('');
+        }
+        break;
+
+    case 'detect':
+        // Output unclassified plugins and themes as JSON (for Claude integration)
+        $path = $positionalArgs[0] ?? getcwd();
+
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            echo json_encode(['error' => "Could not find wp-content directory in: {$path}"]);
+            exit(1);
+        }
+
+        $detector = new \AccentDesign\WPDoctor\WPDetector($wpContentPath, false);
+        $result = [
+            'unclassified_plugins' => [],
+            'themes' => [],
+            'active_theme' => null,
+            'wp_cli_available' => false,
+        ];
+
+        // Check WP-CLI
+        $wpCliOutput = shell_exec('wp --version 2>&1');
+        $result['wp_cli_available'] = strpos($wpCliOutput ?? '', 'WP-CLI') !== false;
+
+        // Get unclassified plugins (scan once to trigger WordPress.org checks)
+        $pluginsDir = $wpContentPath . '/plugins';
+        if (is_dir($pluginsDir)) {
+            $dirs = glob($pluginsDir . '/*', GLOB_ONLYDIR);
+            $config = $detector->listConfig();
+
+            foreach ($dirs as $dir) {
+                $slug = basename($dir);
+                if (in_array($slug, ['.wp-doctor', 'vendor', 'node_modules'])) continue;
+                if (!isset($config[$slug])) {
+                    $result['unclassified_plugins'][] = $slug;
+                }
+            }
+        }
+
+        // Get themes
+        $themesDir = $wpContentPath . '/themes';
+        if (is_dir($themesDir)) {
+            $themeDirs = glob($themesDir . '/*', GLOB_ONLYDIR);
+            foreach ($themeDirs as $dir) {
+                $slug = basename($dir);
+                $styleFile = $dir . '/style.css';
+                if (file_exists($styleFile)) {
+                    $content = file_get_contents($styleFile, false, null, 0, 2048);
+                    preg_match('/Theme Name:\s*(.+)$/m', $content, $nameMatch);
+                    $result['themes'][] = [
+                        'slug' => $slug,
+                        'name' => trim($nameMatch[1] ?? $slug),
+                    ];
+                }
+            }
+        }
+
+        // Try to detect active theme via WP-CLI
+        if ($result['wp_cli_available']) {
+            $wpPath = dirname($wpContentPath);
+            $activeTheme = trim(shell_exec("wp option get stylesheet --path={$wpPath} 2>/dev/null") ?? '');
+            if ($activeTheme && !str_contains($activeTheme, 'Error')) {
+                $result['active_theme'] = $activeTheme;
+            }
+        }
+
+        echo json_encode($result, JSON_PRETTY_PRINT);
+        break;
+
+    case 'set-plugin':
+        // Set plugin classification: wp-doctor set-plugin <path> <slug> <type>
+        $path = $positionalArgs[0] ?? getcwd();
+        $slug = $positionalArgs[1] ?? null;
+        $type = $positionalArgs[2] ?? null;
+
+        if (!$slug || !$type) {
+            error("Usage: wp-doctor set-plugin <path> <slug> <custom|third-party>");
+        }
+
+        if (!in_array($type, ['custom', 'third-party'])) {
+            error("Type must be 'custom' or 'third-party'");
+        }
+
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        // Load and update config
+        $detector = new \AccentDesign\WPDoctor\WPDetector($wpContentPath, false);
+        $configFile = dirname($wpContentPath);
+        for ($i = 0; $i < 5; $i++) {
+            if (is_dir($configFile . '/.git') || file_exists($configFile . '/composer.json')) {
+                $configFile = $configFile . '/.wp-doctor/plugins.json';
+                break;
+            }
+            $configFile = dirname($configFile);
+        }
+
+        $config = file_exists($configFile) ? json_decode(file_get_contents($configFile), true) : [];
+        $config['plugins'][$slug] = [
+            'type' => $type,
+            'name' => $slug,
+            'detected' => date('Y-m-d'),
+        ];
+        file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT));
+        echo json_encode(['success' => true, 'slug' => $slug, 'type' => $type]);
+        break;
+
+    case 'set-theme':
+        // Set active theme: wp-doctor set-theme <path> <slug>
+        $path = $positionalArgs[0] ?? getcwd();
+        $slug = $positionalArgs[1] ?? null;
+
+        if (!$slug) {
+            error("Usage: wp-doctor set-theme <path> <slug>");
+        }
+
+        $wpContentPath = null;
+        if (is_dir($path . '/wp-content')) {
+            $wpContentPath = $path . '/wp-content';
+        } elseif (is_dir($path . '/app/wp-content')) {
+            $wpContentPath = $path . '/app/wp-content';
+        } elseif (basename($path) === 'wp-content') {
+            $wpContentPath = $path;
+        }
+
+        if (!$wpContentPath) {
+            error("Could not find wp-content directory in: {$path}");
+        }
+
+        // Load and update config
+        $configFile = dirname($wpContentPath);
+        for ($i = 0; $i < 5; $i++) {
+            if (is_dir($configFile . '/.git') || file_exists($configFile . '/composer.json')) {
+                $configFile = $configFile . '/.wp-doctor/plugins.json';
+                break;
+            }
+            $configFile = dirname($configFile);
+        }
+
+        $config = file_exists($configFile) ? json_decode(file_get_contents($configFile), true) : [];
+        $config['active_theme'] = $slug;
+        file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT));
+        echo json_encode(['success' => true, 'active_theme' => $slug]);
+        break;
+
+    case 'help':
+    default:
+        output('');
+        output(colorize('WP Doctor', 'bold') . ' - WordPress Code Diagnostic Tool', 'cyan');
+        output('');
+        output('By default, WP Doctor only scans:');
+        output('  • Custom plugins (not found on WordPress.org)');
+        output('  • Active theme (and parent if child theme)');
+        output('');
+        output('This excludes third-party plugins from your score, giving you');
+        output('an accurate picture of your own code quality.');
+        output('');
+        output('Usage:');
+        output('  wp-doctor scan [path]              Scan WordPress installation');
+        output('  wp-doctor check <file>             Check a specific file');
+        output('  wp-doctor preview [path]           Preview auto-fixable issues');
+        output('  wp-doctor list-config [path]       Show saved plugin classifications');
+        output('  wp-doctor reset-config [path]      Clear saved classifications');
+        output('  wp-doctor help                     Show this help');
+        output('');
+        output('Options:');
+        output('  --format=<table|json|summary>      Output format (default: table)');
+        output('  --category=<category>              Filter by category');
+        output('  --plugins                          Scan plugins only');
+        output('  --themes                           Scan themes only');
+        output('  --all                              Scan ALL plugins/themes (legacy mode)');
+        output('  --non-interactive                  Skip prompts (for CI/automation)');
+        output('  --verbose                          Show detailed output');
+        output('  --ignore=<patterns>                Comma-separated patterns to skip');
+        output('');
+        output('Categories:');
+        output('  all, deprecations, null-safety, security, performance, dead-code');
+        output('');
+        output('Examples:');
+        output('  wp-doctor scan /path/to/wordpress');
+        output('  wp-doctor scan . --format=json');
+        output('  wp-doctor scan . --plugins --category=security');
+        output('  wp-doctor scan . --all                    # Include third-party plugins');
+        output('  wp-doctor list-config .                   # See what is classified');
+        output('  wp-doctor reset-config .                  # Re-prompt for all plugins');
+        output('');
+        output('First Run:');
+        output('  On first scan, you will be prompted to classify any plugins not');
+        output('  found on WordPress.org as either [C]ustom or [T]hird-party/paid.');
+        output('  These choices are saved to .wp-doctor/plugins.json');
+        output('');
+        break;
+}

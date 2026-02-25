@@ -1,0 +1,37 @@
+{
+    "name": "accentdesign/wp-doctor",
+    "description": "Smart WordPress code health analyzer. Security, PHP 8 compatibility, performance audits with Claude Code integration.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["wordpress", "security", "php8", "static-analysis", "code-quality", "claude-code"],
+    "homepage": "https://github.com/accentdesign/wp-doctor",
+    "authors": [
+        {
+            "name": "Accent Design",
+            "email": "hello@accentdesign.co.uk",
+            "homepage": "https://accentdesign.co.uk"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "bin": ["bin/wp-doctor"],
+    "autoload": {
+        "psr-4": {
+            "AccentDesign\\WPDoctor\\": "src/"
+        },
+        "files": [
+            "command.php"
+        ]
+    },
+    "extra": {
+        "commands": [
+            "AccentDesign\\WPDoctor\\Command"
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    }
+}

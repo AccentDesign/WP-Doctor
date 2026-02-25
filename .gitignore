@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+/mcp-server/node_modules/
+.DS_Store
+*.log
+.idea/
+.vscode/
+*.cache
+.phpunit.result.cache
+composer.lock

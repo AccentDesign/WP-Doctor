@@ -1,0 +1,25 @@
+{
+  "name": "@accent-design/wp-doctor-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for WP Doctor - WordPress diagnostic tool",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "wp-doctor-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "wordpress",
+    "wp-cli",
+    "diagnostics",
+    "mcp",
+    "claude"
+  ],
+  "author": "Accent Design",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0"
+  }
+}
