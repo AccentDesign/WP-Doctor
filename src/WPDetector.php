@@ -87,40 +87,71 @@ class WPDetector
                 'allow' => [
                     // Allow all bash commands (no prompts)
                     'Bash',
-                    // wp-doctor commands (relative paths work from any directory)
-                    'Bash(php:*wp-doctor*)',
-                    'Bash(./bin/wp-doctor:*)',
-                    'Bash(php bin/wp-doctor:*)',
-                    'Bash(php ./bin/wp-doctor:*)',
-                    'Bash(php vendor/bin/wp-doctor:*)',
                     // PHP operations
                     'Bash(php:*)',
                     'Bash(php -l:*)',
-                    // Composer
-                    'Bash(composer:*)',
-                    // Git (safe operations)
-                    'Bash(git status:*)',
-                    'Bash(git diff:*)',
-                    'Bash(git log:*)',
-                    'Bash(git add:*)',
-                    'Bash(git commit:*)',
-                    'Bash(git push:*)',
+                    'Bash(for:*)',
                     // File operations
                     'Bash(ls:*)',
                     'Bash(find:*)',
                     'Bash(grep:*)',
                     'Bash(cat:*)',
+                    'Bash(cp:*)',
+                    'Bash(rm:*)',
+                    'Bash(rm -f:*)',
+                    'Bash(head:*)',
+                    'Bash(tail:*)',
+                    'Bash(echo:*)',
+                    'Bash(basename:*)',
+                    'Bash(dirname:*)',
+                    'Bash(chmod:*)',
+                    'Bash(sed:*)',
+                    'Bash(jq:*)',
+                    'Bash(xargs:*)',
+                    // Git operations
+                    'Bash(git check-ignore:*)',
+                    'Bash(git add:*)',
+                    'Bash(git commit:*)',
+                    'Bash(git push:*)',
+                    // Composer
+                    'Bash(composer:*)',
+                    'Bash(composer install:*)',
                     // WordPress CLI
                     'Bash(wp:*)',
+                    'Bash(wp option get:*)',
+                    'Bash(wp --version:*)',
                     // Docker
                     'Bash(docker compose:*)',
                     'Bash(docker-compose:*)',
+                    'Bash(docker-compose exec:*)',
+                    'Bash(docker-compose down:*)',
+                    'Bash(ddev describe:*)',
                     // NPM/Node
                     'Bash(npm:*)',
+                    'Bash(npm install:*)',
+                    'Bash(npm run build:*)',
                     'Bash(npx:*)',
-                    // Homebrew (for installing dependencies)
+                    'Bash(npx tailwindcss:*)',
+                    // Homebrew
                     'Bash(brew install:*)',
-                    // Web search for docs
+                    'Bash(brew list:*)',
+                    // Shell
+                    'Bash(cd:*)',
+                    'Bash(source ~/.zshrc)',
+                    'Bash(source ~/.bashrc)',
+                    // Python
+                    'Bash(python3:*)',
+                    // Process management
+                    'Bash(pkill:*)',
+                    'Bash(pgrep:*)',
+                    // macOS utilities
+                    'Bash(sips:*)',
+                    'Bash(convert:*)',
+                    'Bash(log show:*)',
+                    'Bash(launchctl unload:*)',
+                    'Bash(launchctl load:*)',
+                    'Bash(launchctl list:*)',
+                    // Web search
                     'WebSearch',
                 ],
             ],

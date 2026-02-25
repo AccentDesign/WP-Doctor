@@ -11,30 +11,40 @@ A smart WordPress code health analyzer. Scans custom plugins and themes for secu
 - **Health Score** - 0-100 score for quick assessment
 - **Claude Code Integration** - Auto-configures permissions for AI-assisted fixing
 
-## Installation
+## Quick Start
 
-### Standalone (Recommended)
+```bash
+git clone https://github.com/accentdesign/wp-doctor.git
+cd wp-doctor
+./wp-doctor-setup
+```
+
+This checks prerequisites (PHP, Node.js, Composer), installs dependencies, and creates the MCP config.
+
+Then start Claude:
+
+```bash
+claude
+```
+
+Say anything (like "go" or "hi") and Claude will:
+1. Ask for your WordPress installation path
+2. Scan your custom plugins and active theme
+3. Show issues and offer to fix them
+
+## CLI Only (without Claude)
 
 ```bash
 git clone https://github.com/accentdesign/wp-doctor.git
 cd wp-doctor
 composer install
-```
 
-### Via Composer
-
-```bash
-composer require accentdesign/wp-doctor
-```
-
-## Usage
-
-### Basic Scan
-
-```bash
-# Scan wp-content directory
 php bin/wp-doctor scan /path/to/wordpress/wp-content
+```
 
+### Options
+
+```bash
 # Non-interactive mode (for CI/scripts)
 php bin/wp-doctor scan /path/to/wp-content --non-interactive
 
@@ -42,7 +52,7 @@ php bin/wp-doctor scan /path/to/wp-content --non-interactive
 php bin/wp-doctor scan /path/to/wp-content --format=json
 ```
 
-### Plugin Classification
+## Plugin Classification
 
 WP Doctor automatically detects plugins from WordPress.org and skips them. For custom plugins, it will prompt you to classify them:
 
@@ -118,18 +128,14 @@ On first run, it also creates:
 
 ## Claude Code Integration
 
-WP Doctor is designed to work seamlessly with Claude Code:
+WP Doctor includes an MCP server that gives Claude direct access to scanning tools:
 
-1. Run `wp-doctor scan` to identify issues
-2. Claude reads the JSON output
-3. Claude fixes the code
-4. Re-run scan to verify improvements
+- `wp_doctor_scan` - Full health scan
+- `wp_doctor_check_file` - Check a specific file
+- `wp_doctor_preview_fixes` - Preview auto-fixes
+- `wp_doctor_apply_fixes` - Apply fixes
 
-The auto-generated Claude settings allow:
-- Running wp-doctor commands
-- PHP syntax checking
-- Git operations
-- Common development tools
+Run `./wp-doctor-setup` once, then `claude` to start. Claude handles the rest.
 
 ## CI/CD Integration
 
@@ -154,7 +160,9 @@ WP Doctor is completely safe:
 ## Requirements
 
 - PHP 7.4 or higher
+- Node.js (for MCP server)
 - Composer (for installation)
+- [Claude Code](https://claude.ai/claude-code) (for AI-assisted workflow)
 
 ## License
 

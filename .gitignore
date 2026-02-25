@@ -8,3 +8,5 @@
 *.cache
 .phpunit.result.cache
 composer.lock
+.mcp.json
+.claude/settings.local.json

@@ -20,25 +20,31 @@ import fs from "fs";
 
 const execAsync = promisify(exec);
 
+// Get target path from command line arg or env
+const targetPath = process.argv[2] || process.env.WP_DOCTOR_PATH || process.cwd();
+
 // Configuration
 const config = {
-  wpPath: process.env.WP_DOCTOR_PATH || process.cwd(),
-  wpCliPath: process.env.WP_CLI_PATH || "wp",
+  wpPath: targetPath,
+  wpDoctorBin: path.join(path.dirname(import.meta.url.replace('file://', '')), '..', 'bin', 'wp-doctor'),
   timeout: 120000, // 2 minutes
 };
 
 /**
- * Execute a WP-CLI command
+ * Execute wp-doctor command using standalone script (no DB required)
  */
-async function runWpCli(command, options = {}) {
+async function runWpDoctor(command, options = {}) {
   const wpPath = options.path || config.wpPath;
-  const fullCommand = `${config.wpCliPath} ${command} --path="${wpPath}" --allow-root`;
+
+  // Map WP-CLI style commands to standalone script commands
+  // WP-CLI: "scan --format=json" -> Standalone: "scan <path> --format=json"
+  const standaloneCommand = `php "${config.wpDoctorBin}" ${command} "${wpPath}" --non-interactive 2>&1`;
 
   try {
-    const { stdout, stderr } = await execAsync(fullCommand, {
+    const { stdout, stderr } = await execAsync(standaloneCommand, {
       timeout: config.timeout,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-      cwd: wpPath,
+      maxBuffer: 10 * 1024 * 1024,
+      cwd: path.dirname(config.wpDoctorBin),
     });
 
     return {
@@ -251,7 +257,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "wp_doctor_scan": {
-        let command = "doctor scan --format=json";
+        let command = "scan --format=json";
 
         if (args?.category && args.category !== "all") {
           command += ` --category=${args.category}`;
@@ -266,7 +272,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           command += " --active-only";
         }
 
-        const result = await runWpCli(command, { path: wpPath });
+        const result = await runWpDoctor(command, { path: wpPath });
 
         if (!result.success) {
           return {
@@ -313,8 +319,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const command = `doctor check "${args.file}" --format=json`;
-        const result = await runWpCli(command, { path: wpPath });
+        const command = `check "${args.file}" --format=json`;
+        // Note: standalone uses 'check', WP-CLI uses 'doctor check' (added by runWpDoctor)
+        const result = await runWpDoctor(command, { path: wpPath });
 
         if (!result.success) {
           return {
@@ -338,8 +345,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "wp_doctor_info": {
-        const command = "doctor info --format=json";
-        const result = await runWpCli(command, { path: wpPath });
+        const command = "info --format=json";
+        const result = await runWpDoctor(command, { path: wpPath });
 
         if (!result.success) {
           return {
@@ -363,7 +370,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "wp_doctor_preview_fixes": {
-        let command = "doctor preview";
+        let command = "preview";
 
         if (args?.category) {
           command += ` --category=${args.category}`;
@@ -372,7 +379,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           command += ` --file="${args.file}"`;
         }
 
-        const result = await runWpCli(command, { path: wpPath });
+        const result = await runWpDoctor(command, { path: wpPath });
 
         return {
           content: [
@@ -394,7 +401,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           command += ` --file="${args.file}"`;
         }
 
-        const result = await runWpCli(command, { path: wpPath });
+        const result = await runWpDoctor(command, { path: wpPath });
 
         return {
           content: [

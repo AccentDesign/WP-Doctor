@@ -289,6 +289,74 @@ class Command extends WP_CLI_Command
     }
 
     /**
+     * Start the MCP server for Claude Code integration.
+     *
+     * Launches the Model Context Protocol server that allows Claude Code
+     * to interact with WP Doctor tools directly.
+     *
+     * ## OPTIONS
+     *
+     * [--background]
+     * : Run the MCP server in the background.
+     *
+     * ## EXAMPLES
+     *
+     *     # Start MCP server (foreground)
+     *     wp doctor mcp
+     *
+     *     # Start MCP server in background
+     *     wp doctor mcp --background
+     *
+     * @when before_wp_load
+     */
+    public function mcp($args, $assoc_args)
+    {
+        $background = isset($assoc_args['background']);
+
+        // Find mcp-server directory relative to this package
+        $packageDir = dirname(__DIR__);
+        $mcpServerDir = $packageDir . '/mcp-server';
+        $mcpServerIndex = $mcpServerDir . '/index.js';
+
+        if (!file_exists($mcpServerIndex)) {
+            // Use fwrite to stderr to avoid corrupting MCP stdio
+            fwrite(STDERR, "MCP server not found at: {$mcpServerIndex}\n");
+            exit(1);
+        }
+
+        // Check node is available
+        $nodeCheck = shell_exec('which node 2>/dev/null');
+        if (empty($nodeCheck)) {
+            fwrite(STDERR, "Node.js is required to run the MCP server.\n");
+            exit(1);
+        }
+
+        // Check if node_modules exists, install silently if needed
+        if (!is_dir($mcpServerDir . '/node_modules')) {
+            fwrite(STDERR, "Installing MCP server dependencies...\n");
+            shell_exec("cd {$mcpServerDir} && npm install 2>&1");
+            if (!is_dir($mcpServerDir . '/node_modules')) {
+                fwrite(STDERR, "Failed to install MCP dependencies.\n");
+                exit(1);
+            }
+        }
+
+        if ($background) {
+            // Run in background (for manual testing)
+            $pid = shell_exec("cd {$mcpServerDir} && nohup node index.js > /tmp/wp-doctor-mcp.log 2>&1 & echo $!");
+            fwrite(STDERR, "MCP server started in background (PID: " . trim($pid) . ")\n");
+        } else {
+            // Run in foreground - exec replaces this process entirely
+            // This ensures clean stdio passthrough for MCP protocol
+            $nodePath = trim($nodeCheck);
+            pcntl_exec($nodePath, [$mcpServerIndex], ['WP_DOCTOR_PATH' => ABSPATH ?? getcwd()]);
+
+            // Fallback if pcntl_exec not available
+            passthru("cd {$mcpServerDir} && node index.js");
+        }
+    }
+
+    /**
      * Get MySQL version
      */
     private function getMySQLVersion()

@@ -1,0 +1,19 @@
+# WP Doctor - Claude Instructions
+
+## On First Message (any message)
+
+Whatever the user says first, do this:
+
+1. Check if `.mcp.json` exists in this directory
+2. If NO → say "Run `./wp-doctor-setup` first, then come back."
+3. If YES → ask "What's the path to your WordPress installation?"
+
+Once you have a path, use `wp_doctor_scan` to analyze it and show the results.
+
+## MCP Tools
+
+- `wp_doctor_scan` - Full health scan
+- `wp_doctor_check_file` - Check a specific file
+- `wp_doctor_preview_fixes` - Preview fixes
+- `wp_doctor_apply_fixes` - Apply fixes
+- `wp_doctor_explain` - Explain a rule
