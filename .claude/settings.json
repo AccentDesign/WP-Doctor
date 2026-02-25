@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"additionalContext\": \"IMPORTANT: Run the setup check from CLAUDE.md NOW. Check if .mcp.json exists and follow the startup instructions immediately, before responding to the user.\"}'"
+          }
+        ]
+      }
+    ]
+  }
+}
