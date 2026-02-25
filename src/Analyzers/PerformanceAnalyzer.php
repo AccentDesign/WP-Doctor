@@ -77,6 +77,16 @@ class PerformanceAnalyzer extends BaseAnalyzer
         if (preg_match_all('/[\'"]posts_per_page[\'"]\s*=>\s*-1/', $content, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $line = $this->findLineNumber($content, $match[1]);
+
+                // Check surrounding context for 'fields' => 'ids' (efficient count queries)
+                $contextStart = max(0, $match[1] - 300);
+                $context = substr($content, $contextStart, 600);
+
+                // Skip if this is a count/ID-only query (efficient pattern)
+                if (preg_match('/[\'"]fields[\'"]\s*=>\s*[\'"]ids[\'"]/', $context)) {
+                    continue;
+                }
+
                 $diagnostics[] = $this->createDiagnostic(
                     $filePath,
                     $line,
@@ -92,6 +102,16 @@ class PerformanceAnalyzer extends BaseAnalyzer
         if (preg_match_all('/[\'"]numberposts[\'"]\s*=>\s*-1/', $content, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $line = $this->findLineNumber($content, $match[1]);
+
+                // Check surrounding context for 'fields' => 'ids' (efficient count queries)
+                $contextStart = max(0, $match[1] - 300);
+                $context = substr($content, $contextStart, 600);
+
+                // Skip if this is a count/ID-only query (efficient pattern)
+                if (preg_match('/[\'"]fields[\'"]\s*=>\s*[\'"]ids[\'"]/', $context)) {
+                    continue;
+                }
+
                 $diagnostics[] = $this->createDiagnostic(
                     $filePath,
                     $line,
@@ -351,18 +371,24 @@ class PerformanceAnalyzer extends BaseAnalyzer
         if (preg_match_all('/[\'"]orderby[\'"]\s*=>\s*[\'"]meta_value[\'"]/', $content, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $line = $this->findLineNumber($content, $match[1]);
-                $context = substr($content, $match[1], 200);
+                // Check surrounding context for type specification
+                $contextStart = max(0, $match[1] - 200);
+                $context = substr($content, $contextStart, 500);
 
-                if (strpos($context, 'meta_value_num') === false) {
-                    $diagnostics[] = $this->createDiagnostic(
-                        $filePath,
-                        $line,
-                        'warning',
-                        'meta-orderby-type',
-                        'orderby meta_value without specifying type',
-                        'Use meta_value_num for numeric values for proper sorting'
-                    );
+                // Skip if meta_value_num is used or meta_type is specified
+                if (strpos($context, 'meta_value_num') !== false ||
+                    strpos($context, 'meta_type') !== false ||
+                    strpos($context, "'type'") !== false) {
+                    continue;
                 }
+                $diagnostics[] = $this->createDiagnostic(
+                    $filePath,
+                    $line,
+                    'warning',
+                    'meta-orderby-type',
+                    'orderby meta_value without specifying type',
+                    'Use meta_value_num for numeric values or meta_type for explicit typing'
+                );
             }
         }
 
