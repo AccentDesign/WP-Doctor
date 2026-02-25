@@ -411,15 +411,8 @@ class WPDetector
 
             $input = strtolower(trim(fgets(STDIN)));
 
-            if ($input === 'c' || $input === 'custom') {
-                $this->config['plugins'][$slug] = [
-                    'type' => 'custom',
-                    'name' => $name,
-                    'detected' => date('Y-m-d'),
-                ];
-                $custom[$slug] = $pluginData;
-                echo "  \033[32m→ Will be scanned\033[0m\n";
-            } else {
+            // Default to custom (safer to scan too much than miss your own code)
+            if ($input === 't' || $input === 'third-party' || $input === 'third' || $input === 'paid') {
                 $this->config['plugins'][$slug] = [
                     'type' => 'third-party',
                     'name' => $name,
@@ -427,6 +420,14 @@ class WPDetector
                 ];
                 $excluded[$slug] = $pluginData;
                 echo "  \033[33m→ Excluded from scan\033[0m\n";
+            } else {
+                $this->config['plugins'][$slug] = [
+                    'type' => 'custom',
+                    'name' => $name,
+                    'detected' => date('Y-m-d'),
+                ];
+                $custom[$slug] = $pluginData;
+                echo "  \033[32m→ Will be scanned\033[0m\n";
             }
             echo "\n";
         }
