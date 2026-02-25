@@ -12,8 +12,10 @@ Once you have a path, use `wp_doctor_scan` to analyze it and show the results.
 
 ## MCP Tools
 
-- `wp_doctor_scan` - Full health scan
+- `wp_doctor_scan` - Full health scan (returns issues to fix)
 - `wp_doctor_check_file` - Check a specific file
-- `wp_doctor_preview_fixes` - Preview fixes
-- `wp_doctor_apply_fixes` - Apply fixes
 - `wp_doctor_explain` - Explain a rule
+
+## Fixing Issues
+
+After scanning, fix issues directly using the Edit tool. No auto-fixer needed - you read the diagnostics, understand the context, and make the appropriate fix.
