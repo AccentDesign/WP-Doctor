@@ -117,14 +117,19 @@ class SecurityAnalyzer extends BaseAnalyzer
         $pattern = '/\$_POST\s*\[/';
 
         if (preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
-            // Check if file has ANY nonce verification or generation
-            // wp_nonce_field indicates nonce awareness (verification may be in parent/handler)
-            $hasFileNonceCheck =
-                strpos($content, 'wp_verify_nonce') !== false ||
-                strpos($content, 'check_admin_referer') !== false ||
-                strpos($content, 'check_ajax_referer') !== false ||
-                strpos($content, 'wp_nonce_field') !== false ||
-                strpos($content, 'wp_create_nonce') !== false;
+            // Check if file has PROPER nonce verification (not just generation or lenient checks)
+            // wp_nonce_field/wp_create_nonce generate nonces but don't verify them
+            // isset($_POST['nonce']) && wp_verify_nonce is lenient - passes if no nonce sent
+            $hasWpVerifyNonce = strpos($content, 'wp_verify_nonce') !== false;
+            $hasAdminReferer = strpos($content, 'check_admin_referer') !== false;
+            $hasAjaxReferer = strpos($content, 'check_ajax_referer') !== false;
+
+            // Detect lenient pattern: isset($_POST['nonce']) && ... wp_verify_nonce
+            // This is lazy - it only checks nonce IF provided, so attacker can skip it
+            $hasLenientPattern = preg_match('/isset\s*\(\s*\$_POST\s*\[\s*[\'"]nonce[\'"]\s*\]\s*\)\s*&&[^;]*wp_verify_nonce/', $content);
+
+            // Only count as protected if has real verification, not lenient
+            $hasFileNonceCheck = ($hasWpVerifyNonce && !$hasLenientPattern) || $hasAdminReferer || $hasAjaxReferer;
 
             // Check for reCAPTCHA verification - valid CSRF alternative for public forms
             $hasRecaptchaCheck =
